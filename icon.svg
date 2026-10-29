@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="HomeBox">
+  <title>HomeBox — 家庭文件服务</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#2f6fe0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 圆角方块背景 -->
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+
+  <!-- 房子：屋顶 + 房身 -->
+  <path d="M256 92 L104 224 L408 224 Z" fill="#ffffff"/>
+  <rect x="128" y="224" width="256" height="160" rx="24" fill="#ffffff"/>
+
+  <!-- 存储抽屉（硬盘位） -->
+  <rect x="168" y="262" width="176" height="16" rx="8" fill="#1d4ed8"/>
+  <rect x="168" y="298" width="176" height="16" rx="8" fill="#1d4ed8"/>
+  <rect x="168" y="334" width="176" height="16" rx="8" fill="#1d4ed8"/>
+
+  <!-- 发送 / 传输 角标 -->
+  <circle cx="396" cy="116" r="52" fill="#ffffff"/>
+  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="#2f6fe0" transform="translate(372,92) scale(2)"/>
+</svg>

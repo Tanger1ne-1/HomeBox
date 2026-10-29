@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>登录 - HomeBox</title>
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('nas-theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    :root { --bg:#ffffff; --panel:#ffffff; --panel-2:#f0f2f5; --text:#1a1d24; --muted:#7a8089; --accent:#2f6fe0; --border:#e5e8ee; }
+    html.dark { --bg:#0f1115; --panel:#1a1d24; --panel-2:#22262f; --text:#e6e8ec; --muted:#9aa0ab; --accent:#4f8cff; --border:#2a2f3a; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+    .wrap { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; }
+    .logo { font-size:56px; margin-bottom:12px; }
+    .title { font-size:22px; font-weight:600; margin-bottom:4px; }
+    .sub { font-size:13px; color:var(--muted); margin-bottom:28px; }
+    .card { width:100%; max-width:340px; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+    input { width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--panel-2); color:var(--text); font-size:16px; margin-bottom:16px; outline:none; }
+    input:focus { border-color:var(--accent); }
+    button { width:100%; padding:13px; border:none; border-radius:10px; background:var(--accent); color:#fff; font-size:16px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    button:active { opacity:0.85; }
+    button:disabled { opacity:0.5; }
+    .err { display:none; color:#d64545; font-size:13px; margin-bottom:14px; }
+    .err.show { display:block; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">📦</div>
+    <div class="title">HomeBox</div>
+    <div class="sub">请输入账号密码登录</div>
+    <div class="card">
+      <div id="err" class="err"></div>
+      <label for="user">用户名</label>
+      <input id="user" type="text" autocomplete="username" autocapitalize="off">
+      <label for="pass">密码</label>
+      <input id="pass" type="password" autocomplete="current-password">
+      <button id="submit">登 录</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var userEl = document.getElementById('user');
+      var passEl = document.getElementById('pass');
+      var errEl = document.getElementById('err');
+      var btn = document.getElementById('submit');
+
+      function showErr(msg) { errEl.textContent = msg; errEl.classList.add('show'); }
+
+      function doLogin() {
+        var u = userEl.value.trim();
+        var p = passEl.value;
+        if (!u || !p) { showErr('请输入用户名和密码'); return; }
+        btn.disabled = true;
+        btn.textContent = '登录中…';
+        fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p }),
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.ok) { location.href = '/'; return; }
+          btn.disabled = false;
+          btn.textContent = '登 录';
+          showErr(d && d.error ? d.error : '登录失败');
+        }).catch(function (e) {
+          btn.disabled = false;
+          btn.textContent = '登 录';
+          showErr('网络错误：' + e);
+        });
+      }
+
+      btn.addEventListener('click', doLogin);
+      passEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+      userEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') passEl.focus(); });
+      userEl.focus();
+    })();
+  </script>
+</body>
+</html>

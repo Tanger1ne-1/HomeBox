@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <title>HomeBox</title>
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('nas-theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #ffffff;
+      --panel-2: #f0f2f5;
+      --text: #1a1d24;
+      --muted: #7a8089;
+      --accent: #2f6fe0;
+      --border: #e5e8ee;
+    }
+    html.dark {
+      --bg: #0f1115;
+      --panel: #1a1d24;
+      --panel-2: #22262f;
+      --text: #e6e8ec;
+      --muted: #9aa0ab;
+      --accent: #4f8cff;
+      --border: #2a2f3a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+    .title { font-size: 18px; font-weight: 600; }
+    .title-group { display: flex; align-items: baseline; gap: 8px; }
+    .stats { font-size: 12px; color: var(--muted); }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .theme-btn {
+      background: transparent;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .logout-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 14px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .crumb-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 12px 0 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 0;
+      font-size: 14px;
+      overflow-x: auto;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+    }
+    .search-toggle {
+      background: transparent;
+      border: none;
+      font-size: 16px;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 6px;
+      flex-shrink: 0;
+      opacity: 0.7;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .search-toggle:active { opacity: 1; }
+    .crumb { color: var(--accent); text-decoration: none; }
+    .crumb-sep { color: var(--muted); }
+    .list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+      gap: 8px;
+      padding: 8px;
+      padding-bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+    .toolbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      gap: 10px;
+      padding: 10px 16px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      z-index: 10;
+    }
+    .tool-btn {
+      flex: 1;
+      padding: 12px 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tool-btn:active { opacity: 0.7; }
+    .tool-btn:disabled { opacity: 0.35; }
+    .tile {
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .tile-thumb {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 8px;
+      background: var(--panel-2);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
+    }
+    .tile-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .tile-media {
+      background: linear-gradient(100deg, var(--panel-2) 40%, var(--border) 50%, var(--panel-2) 60%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .tile-badge {
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      background: rgba(0, 0, 0, 0.55);
+      color: #ffffff;
+      font-size: 11px;
+      border-radius: 4px;
+      padding: 1px 5px;
+      line-height: 1.2;
+    }
+    .tile-name {
+      font-size: 12px;
+      margin-top: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: center;
+      padding: 0 2px;
+    }
+    .empty { padding: 40px 16px; text-align: center; color: var(--muted); font-size: 14px; }
+    .loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+      z-index: 30;
+    }
+    .hidden { display: none !important; }
+    .preview {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      z-index: 60;
+    }
+    .preview-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+    }
+    .preview-name {
+      flex: 1;
+      min-width: 0;
+      margin-right: 8px;
+      font-size: 14px;
+      color: #ffffff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .icon-btn {
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      border: none;
+      text-decoration: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .preview-actions { display: flex; align-items: center; gap: 8px; }
+    .preview-body {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .gallery-viewport {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+    .gallery-layer {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      will-change: transform;
+    }
+    .preview-top, .nav-btn { transition: opacity 0.2s ease; }
+    .chrome-hidden { opacity: 0; pointer-events: none; }
+    .preview-media {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .preview-audio { width: 90%; }
+    .preview-text {
+      align-self: stretch;
+      width: 100%;
+      margin: 0;
+      padding: 16px;
+      overflow: auto;
+      color: #e6e6e6;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      -webkit-overflow-scrolling: touch;
+    }
+    .preview-download {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .preview-download-icon { font-size: 56px; }
+    .download-btn {
+      display: inline-block;
+      padding: 10px 28px;
+      background: var(--accent);
+      color: #ffffff;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 15px;
+    }
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      font-size: 26px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 5;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-prev { left: 8px; }
+    .nav-next { right: 8px; }
+    .top-btn {
+      position: fixed;
+      right: 16px;
+      bottom: calc(96px + env(safe-area-inset-bottom));
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 15;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* 右滑返回上级目录 */
+    #list { position: relative; z-index: 5; background: var(--bg); }
+    .back-peek {
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      background: var(--bg);
+      transform: translateX(-100%);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .back-peek-head {
+      position: sticky;
+      top: 0;
+      padding: 12px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--muted);
+      z-index: 1;
+    }
+    .upload-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 25;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    }
+    .upload-progress-text { font-size: 13px; margin-bottom: 6px; color: var(--text); }
+    .upload-progress-track { height: 4px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+    .upload-progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s ease; }
+    .edit-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      z-index: 11;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .edit-count {
+      flex: 0 0 auto;
+      font-size: 14px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #move-hint, #copy-hint { flex: 1 1 auto; }
+    .edit-btn {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .edit-btn:active { opacity: 0.7; }
+    .edit-btn:disabled { opacity: 0.35; }
+    .edit-btn.danger { background: #d64545; border-color: #d64545; color: #fff; }
+    .tile.selected .tile-thumb { box-shadow: inset 0 0 0 2px var(--accent); }
+    .tile.selected .tile-thumb::after {
+      content: '✓';
+      position: absolute;
+      left: 4px;
+      top: 4px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      line-height: 20px;
+      text-align: center;
+    }
+    .new-menu {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: flex-end;
+    }
+    .new-sheet {
+      width: 100%;
+      background: var(--panel);
+      border-radius: 14px 14px 0 0;
+      padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .new-item {
+      padding: 16px 8px;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      font-size: 16px;
+      text-align: left;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .new-item:last-child { border-bottom: none; }
+    .new-cancel { text-align: center; color: var(--muted); }
+    .search-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+    .search-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .search-head input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .search-cancel {
+      border: none;
+      background: transparent;
+      color: var(--accent);
+      font-size: 15px;
+      padding: 0 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .search-results-list {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .search-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .search-item:active { background: var(--panel-2); }
+    .search-item:last-child { border-bottom: none; }
+    .search-item-icon { font-size: 20px; flex: 0 0 auto; }
+    .search-item-main { flex: 1; min-width: 0; }
+    .search-item-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .search-item-path { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .search-item-arrow { color: var(--muted); font-size: 20px; flex: 0 0 auto; }
+    .search-empty { padding: 22px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+    .tile.flash .tile-thumb { animation: flash-bg 1.8s ease; }
+    @keyframes flash-bg {
+      0% { background: var(--accent); }
+      100% { background: var(--panel-2); }
+    }
+    .text-editor {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+    .text-editor-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .text-editor-name {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .text-editor-save {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .text-editor-area {
+      flex: 1;
+      width: 100%;
+      border: none;
+      outline: none;
+      resize: none;
+      padding: 14px 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, "SF Mono", "Consolas", "Menlo", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      -webkit-overflow-scrolling: touch;
+    }
+    /* —— 对话（文件传输助手） —— */
+    .chat {
+      position: fixed;
+      inset: 0;
+      z-index: 46;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-peer-name {
+      flex: 1;
+      min-width: 0;
+      font-size: 15px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-msgs {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chat-msg { display: flex; flex-direction: column; max-width: 78%; }
+    .chat-msg.me { align-self: flex-end; align-items: flex-end; }
+    .chat-msg.peer { align-self: flex-start; align-items: flex-start; }
+    .chat-sender { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .chat-bubble {
+      padding: 8px 12px;
+      border-radius: 14px;
+      background: var(--panel-2);
+      font-size: 14px;
+      line-height: 1.5;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .chat-msg.me .chat-bubble { background: var(--accent); color: #fff; }
+    .chat-file {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: var(--panel-2);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      max-width: 100%;
+    }
+    .chat-msg.me .chat-file { background: var(--accent); color: #fff; }
+    .chat-img { max-width: 200px; max-height: 240px; border-radius: 12px; display: block; }
+    .chat-video { max-width: 220px; max-height: 260px; border-radius: 12px; display: block; }
+    .chat-time { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .chat-composer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+    }
+    .chat-composer input {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .chat-send {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      padding: 9px 16px;
+      border-radius: 18px;
+      font-size: 14px;
+      cursor: pointer;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .chat-add {
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 50%;
+      width: 34px;
+      height: 34px;
+      font-size: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="title-group">
+      <div class="title">HomeBox</div>
+      <div id="stats" class="stats">v0.4.0</div>
+    </div>
+    <div class="topbar-right">
+      <button id="theme-toggle" class="theme-btn" aria-label="切换深色模式">🌙</button>
+      <button id="btn-chat" class="theme-btn" aria-label="对话">💬</button>
+      <button id="btn-sleep" class="theme-btn hidden" aria-label="睡眠">💤</button>
+      <button id="btn-logout" class="logout-btn" aria-label="退出登录">退出</button>
+    </div>
+  </header>
+
+  <div class="crumb-bar">
+    <nav id="breadcrumb" class="breadcrumb"></nav>
+    <button id="search-toggle" class="search-toggle" aria-label="搜索">🔍</button>
+  </div>
+
+  <div id="search-overlay" class="search-overlay hidden">
+    <div class="search-head">
+      <input id="search-input" type="search" placeholder="搜索文件或文件夹…" autocomplete="off" enterkeyhint="search">
+      <button id="search-cancel" class="search-cancel">取消</button>
+    </div>
+    <div id="search-results" class="search-results-list"></div>
+  </div>
+
+  <main id="list" class="list"></main>
+
+  <div id="back-peek" class="back-peek">
+    <div id="back-peek-head" class="back-peek-head"></div>
+    <div id="back-peek-list" class="list"></div>
+  </div>
+
+  <div id="preview" class="preview hidden">
+    <div id="preview-top" class="preview-top">
+      <span id="preview-name" class="preview-name"></span>
+      <div class="preview-actions">
+        <a id="preview-download" class="icon-btn" download aria-label="下载">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        <button id="preview-fullscreen" class="icon-btn hidden" aria-label="全屏">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
+        <button id="preview-close" class="icon-btn" aria-label="关闭">✕</button>
+      </div>
+    </div>
+    <div id="preview-body" class="preview-body"></div>
+    <button id="preview-prev" class="nav-btn nav-prev hidden" aria-label="上一个">‹</button>
+    <button id="preview-next" class="nav-btn nav-next hidden" aria-label="下一个">›</button>
+  </div>
+
+  <div id="loading" class="loading hidden">加载中…</div>
+
+  <button id="btn-top" class="top-btn hidden" aria-label="回到顶部">↑</button>
+
+  <nav id="toolbar" class="toolbar">
+    <button id="btn-up" class="tool-btn" aria-label="上级目录" disabled>⬆️ 上级</button>
+    <button id="btn-upload" class="tool-btn" aria-label="上传">📤 上传</button>
+    <button id="btn-edit" class="tool-btn" aria-label="编辑">✏️ 编辑</button>
+    <button id="btn-new" class="tool-btn" aria-label="新建">➕ 新建</button>
+    <button id="btn-refresh" class="tool-btn" aria-label="刷新">🔄 刷新</button>
+  </nav>
+
+  <div id="edit-bar" class="edit-bar hidden">
+    <button id="edit-select-all" class="edit-btn">全选</button>
+    <div id="edit-count" class="edit-count">已选 0 项</div>
+    <button id="edit-rename" class="edit-btn" disabled>✏️ 重命名</button>
+    <button id="edit-copy" class="edit-btn" disabled>📋 复制</button>
+    <button id="edit-text" class="edit-btn" disabled>✍️ 编辑</button>
+    <button id="edit-hide" class="edit-btn hidden" disabled>🙈 隐藏</button>
+    <button id="edit-move" class="edit-btn" disabled>📦 移动</button>
+    <button id="edit-delete" class="edit-btn danger" disabled>🗑 删除</button>
+    <button id="edit-cancel" class="edit-btn">取消</button>
+  </div>
+
+  <div id="move-bar" class="edit-bar hidden">
+    <div id="move-hint" class="edit-count"></div>
+    <button id="move-here" class="edit-btn">📥 移动到此处</button>
+    <button id="move-cancel" class="edit-btn">取消</button>
+  </div>
+
+  <div id="copy-bar" class="edit-bar hidden">
+    <div id="copy-hint" class="edit-count"></div>
+    <button id="copy-here" class="edit-btn">📋 复制到此处</button>
+    <button id="copy-cancel" class="edit-btn">取消</button>
+  </div>
+
+  <input id="file-input" type="file" multiple accept="image/*,video/*" hidden>
+
+  <div id="upload-progress" class="upload-progress hidden">
+    <div id="upload-text" class="upload-progress-text"></div>
+    <div class="upload-progress-track"><div id="upload-bar" class="upload-progress-bar"></div></div>
+  </div>
+
+  <div id="new-menu" class="new-menu hidden">
+    <div class="new-sheet">
+      <button id="new-folder" class="new-item">📁 新建文件夹</button>
+      <button id="new-file" class="new-item">📄 新建文本文件</button>
+      <button id="new-cancel" class="new-item new-cancel">取消</button>
+    </div>
+  </div>
+
+  <div id="text-editor" class="text-editor hidden">
+    <div class="text-editor-top">
+      <button id="text-editor-cancel" class="icon-btn" aria-label="关闭" style="background:var(--panel-2);color:var(--text)">✕</button>
+      <span id="text-editor-name" class="text-editor-name"></span>
+      <button id="text-editor-save" class="text-editor-save">保存</button>
+    </div>
+    <textarea id="text-editor-area" class="text-editor-area" spellcheck="false"></textarea>
+  </div>
+
+  <div id="chat" class="chat hidden">
+    <div class="chat-top">
+      <button id="chat-close" class="chat-add" aria-label="关闭">✕</button>
+      <span id="chat-peer" class="chat-peer-name">HomeBox</span>
+    </div>
+    <div id="chat-msgs" class="chat-msgs"></div>
+    <div class="chat-composer">
+      <button id="chat-add" class="chat-add" aria-label="发送文件">＋</button>
+      <input id="chat-input" type="text" placeholder="发送给 HomeBox…" autocomplete="off">
+      <button id="chat-send" class="chat-send">发送</button>
+    </div>
+    <input id="chat-file-input" type="file" multiple accept="image/*,video/*,*/*" hidden>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

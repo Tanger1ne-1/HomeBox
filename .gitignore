@@ -1,0 +1,21 @@
+# 编译产物
+/nasd.exe
+/nasd-test.exe
+*.exe
+
+# 运行时配置与日志（含账号密码哈希，切勿提交）
+/nasd.json
+/nasd.log
+
+# 本地数据（聊天、回收站、缩略图等）
+/.nas_chat/
+/.nas_trash/
+/.nas_thumb/
+
+# 安装包与发布产物
+/dist/
+
+# 编辑器 / 系统
+*.exe~
+.DS_Store
+Thumbs.db
