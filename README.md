@@ -53,6 +53,13 @@ go build -o nasd.exe -ldflags "-H=windowsgui" ./cmd/nasd
 
 `-H=windowsgui` 让程序不弹出控制台窗口；去掉该参数可在控制台中看到日志。
 
+`cmd/nasd/rsrc.syso` 内嵌了应用图标（Windows 资源），已随仓库提交，`go build` 即可直接带出 HomeBox 图标。如需更换图标后重新生成：
+
+```bash
+go install github.com/akavel/rsrc@latest
+rsrc -ico icon.ico -o cmd/nasd/rsrc.syso
+```
+
 ## 使用
 
 1. 运行 `nasd.exe`（或安装包安装后运行）。
