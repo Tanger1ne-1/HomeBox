@@ -15,6 +15,9 @@
 # 安装包与发布产物
 /dist/
 
+# 图标预览（scripts/make_icon.py 生成）
+/icon_preview.png
+
 # 编辑器 / 系统
 *.exe~
 .DS_Store
