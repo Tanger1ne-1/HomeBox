@@ -899,6 +899,10 @@
         $('btn-up').disabled = (path === '/');
         renderAbsPath();
         applySelection();
+        if (!rootDir) {
+          $('file-list').innerHTML = '<div class="empty">尚未设置存储位置，请先在「⚙️ 设置」页配置要共享的文件夹。</div>';
+          return;
+        }
         apiFetch(apiURL(path)).then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
