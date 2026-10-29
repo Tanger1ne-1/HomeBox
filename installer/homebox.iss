@@ -39,4 +39,8 @@ Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""HomeBox"" dir=in action=allow protocol=TCP localport=8377"; Flags: runhidden; StatusMsg: "正在添加防火墙规则…"
 Filename: "{app}\{#MyAppExeName}"; Description: "运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""HomeBox"""; Flags: runhidden

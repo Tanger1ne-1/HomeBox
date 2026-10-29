@@ -453,21 +453,16 @@
         </div>
 
         <div class="card">
-          <h2>🌐 外网访问</h2>
-          <div class="row">
-            <label class="switch"><input id="ext-toggle" type="checkbox"><span class="slider"></span></label>
-            <span id="ext-status" class="status-pill off">已关闭</span>
-          </div>
-          <div id="ext-detail" class="hidden">
-            <div class="kv"><span>外网访问链接</span><span class="v" id="ext-url">—</span></div>
-            <div class="kv"><span>局域网链接</span><span class="v" id="ext-url-v4">—</span></div>
-            <div class="qr-box">
-              <img id="qr-img" alt="二维码">
-              <div style="flex:1;min-width:200px;">
-                <button id="copy-url" class="btn secondary">复制外网链接</button>
-              </div>
+          <h2>📶 局域网访问</h2>
+          <div class="kv"><span>访问链接</span><span class="v" id="lan-url">—</span></div>
+          <div class="qr-box">
+            <img id="qr-img" alt="二维码">
+            <div style="flex:1;min-width:200px;">
+              <div class="muted" style="margin-bottom:8px;">手机扫码即可在浏览器打开</div>
+              <button id="copy-lan-url" class="btn secondary">复制链接</button>
             </div>
           </div>
+          <div class="muted" style="margin-top:10px;">⚠️ 手机与电脑须连接同一 WiFi / 局域网</div>
         </div>
 
         <div class="card">
@@ -493,11 +488,10 @@
         <li>点击磁盘可填入路径，或作为独立空间存放位置。</li>
         <li>清空回收站会永久删除回收站里的所有文件。</li>
       </ul>
-      <h4>🌐 外网访问</h4>
+      <h4>📶 局域网访问</h4>
       <ul>
-        <li>打开后，手机可用流量从外网访问。</li>
         <li>手机扫码 → 浏览器打开登录页。</li>
-        <li>还需在路由器里放行 IPv6 的相应端口。</li>
+        <li>手机与电脑须连接同一 WiFi / 局域网。</li>
       </ul>
       <h4>⏻ 退出</h4>
       <p>关闭服务后，手机端将无法访问。</p>
@@ -696,8 +690,7 @@
           $('device-name').value = s.deviceName || '';
           $('cur-root').textContent = s.rootDir || '—';
           $('folder-path').value = s.rootDir || '';
-          $('ext-toggle').checked = !!s.external;
-          renderExternal(s);
+          renderLAN(s);
           renderAbsPath();
           return s;
         }).catch(function () { return null; });
@@ -836,32 +829,19 @@
       }
 
       // —— 外网 ——
-      function renderExternal(s) {
-        $('ext-status').textContent = s.external ? '已开启' : '已关闭';
-        $('ext-status').className = 'status-pill ' + (s.external ? 'on' : 'off');
-        $('ext-detail').classList.toggle('hidden', !s.external);
-        if (s.external) {
-          $('ext-url').textContent = s.url || '（未获取到公网 IPv6 地址）';
-          $('ext-url-v4').textContent = s.urlV4 || '—';
-          if (s.url) {
-            $('qr-img').src = '/api/qr?text=' + encodeURIComponent(s.url);
-            $('qr-img').style.display = '';
-          } else {
-            $('qr-img').style.display = 'none';
-          }
+      function renderLAN(s) {
+        $('lan-url').textContent = s.urlV4 || '（未获取到局域网 IP）';
+        if (s.urlV4) {
+          $('qr-img').src = '/api/qr?text=' + encodeURIComponent(s.urlV4);
+          $('qr-img').style.display = '';
+        } else {
+          $('qr-img').style.display = 'none';
         }
       }
-      $('ext-toggle').addEventListener('change', function () {
-        var on = $('ext-toggle').checked;
-        postJSON('/api/config', { external: on }).then(function (d) {
-          if (d.ok) { loadStatus(); toast(on ? '外网访问已开启' : '外网访问已关闭'); }
-          else { $('ext-toggle').checked = !on; toast('设置失败：' + (d.error || '')); }
-        });
-      });
-      $('copy-url').addEventListener('click', function () {
-        var u = $('ext-url').textContent;
-        if (!u || u.indexOf('http') !== 0) { toast('暂无外网链接'); return; }
-        copyText(u, '已复制外网链接');
+      $('copy-lan-url').addEventListener('click', function () {
+        var u = $('lan-url').textContent;
+        if (!u || u.indexOf('http') !== 0) { toast('暂无局域网链接'); return; }
+        copyText(u, '已复制局域网链接');
       });
 
       // —— 退出 ——
