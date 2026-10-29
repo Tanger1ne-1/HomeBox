@@ -43,17 +43,18 @@ func main() {
 		cfg.Port = *portFlag
 	}
 
-	if cfg.RootDir == "" {
-		log.Fatal("未设置 HomeBox 根目录：请用 -root <目录> 指定，或编辑 nasd.json")
+	// 首次运行未配置根目录时不要直接退出，先启动管理面板，让首次向导引导用户
+	// 设置存储位置与管理员账号（否则双击安装后的程序会因缺少 nasd.json 一闪而过）。
+	if cfg.RootDir != "" {
+		abs, err := filepath.Abs(cfg.RootDir)
+		if err != nil {
+			log.Fatalf("解析根目录失败: %v", err)
+		}
+		if st, err := os.Stat(abs); err != nil || !st.IsDir() {
+			log.Fatalf("根目录不存在或不是目录: %s", abs)
+		}
+		cfg.RootDir = abs
 	}
-	abs, err := filepath.Abs(cfg.RootDir)
-	if err != nil {
-		log.Fatalf("解析根目录失败: %v", err)
-	}
-	if st, err := os.Stat(abs); err != nil || !st.IsDir() {
-		log.Fatalf("根目录不存在或不是目录: %s", abs)
-	}
-	cfg.RootDir = abs
 	if cfg.Port == 0 {
 		cfg.Port = 8377
 	}
