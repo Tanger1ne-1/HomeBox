@@ -65,7 +65,7 @@ func main() {
 
 	app := server.NewApp(cfg, "nasd.json")
 
-	// 手机端服务（局域网 + 可选外网）
+	// 手机端服务（局域网）
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
 		if err := http.ListenAndServe(addr, server.New(app)); err != nil {

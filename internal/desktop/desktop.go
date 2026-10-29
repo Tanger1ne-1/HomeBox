@@ -85,10 +85,9 @@ func openWindow() {
 	}()
 }
 
-// openLink 用默认浏览器打开手机访问链接（优先公网 IPv6，其次局域网）。
+// openLink 用默认浏览器打开手机访问链接（优先局域网 IPv4，其次公网 IPv6）。
 func openLink(app *server.App) {
 	v4, v6 := server.PublicURLs(app.Config().Port)
-	// 局域网优先：托盘「打开手机访问链接」默认打开局域网地址。
 	url := v4
 	if url == "" {
 		url = v6
