@@ -98,6 +98,20 @@ func (s *Store) Clear(me, peer string) []Message {
 	return removed
 }
 
+// Delete 删除指定 seq 且涉及 me 的消息并落盘，返回被删除的消息（未找到返回 false）。
+func (s *Store) Delete(me string, seq int64) (Message, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, m := range s.msgs {
+		if m.Seq == seq && (m.From == me || m.To == me) {
+			s.msgs = append(s.msgs[:i], s.msgs[i+1:]...)
+			_ = s.persist()
+			return m, true
+		}
+	}
+	return Message{}, false
+}
+
 // Add 追加一条消息并落盘，返回补全 seq/time 后的完整消息。
 func (s *Store) Add(m Message) (Message, error) {
 	s.mu.Lock()

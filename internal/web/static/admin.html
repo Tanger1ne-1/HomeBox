@@ -1608,6 +1608,8 @@
         var mine = m.from === chatMe;
         var wrap = document.createElement('div');
         wrap.className = 'chat-msg ' + (mine ? 'me' : 'peer');
+        wrap.dataset.seq = m.seq;
+        wrap._msg = m;
         if (!mine) {
           var sender = document.createElement('div');
           sender.className = 'chat-sender';
@@ -1658,6 +1660,45 @@
         chatLastSeq = max;
         chatScrollBottom();
       }
+
+      // 右键消息：复制 / 删除
+      function showChatMsgMenu(x, y, m) {
+        var menu = $('ctx-menu');
+        menu.innerHTML = '';
+        function item(label, fn, danger) {
+          var b = document.createElement('button');
+          b.className = 'ctx-item' + (danger ? ' danger' : '');
+          b.textContent = label;
+          b.addEventListener('click', function () { hideCtxMenu(); fn(); });
+          menu.appendChild(b);
+        }
+        item('复制', function () { copyChatMessage(m); });
+        item('删除', function () { deleteChatMessage(m); }, true);
+        showMenuAt(x, y);
+      }
+
+      function copyChatMessage(m) {
+        var text = m.type === 'text' ? (m.text || '') : (m.fileName || '');
+        if (!text) { toast('没有可复制的内容'); return; }
+        copyText(text, '已复制');
+      }
+
+      function deleteChatMessage(m) {
+        if (!confirm('确定删除这条消息？')) return;
+        postJSON('/api/chat/delete', { seq: m.seq }).then(function (d) {
+          if (!d.ok) { toast(d.error || '删除失败'); return; }
+          var el = $('chat-msgs').querySelector('.chat-msg[data-seq="' + m.seq + '"]');
+          if (el) el.remove();
+          toast('已删除');
+        }).catch(function () { toast('删除失败'); });
+      }
+
+      $('chat-msgs').addEventListener('contextmenu', function (e) {
+        var wrap = e.target.closest('.chat-msg');
+        if (!wrap || !wrap._msg) return;
+        e.preventDefault();
+        showChatMsgMenu(e.clientX, e.clientY, wrap._msg);
+      });
 
       function openChatMedia(path, name, type) {
         $('preview-name').textContent = name;

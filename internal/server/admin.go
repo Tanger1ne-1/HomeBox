@@ -62,6 +62,7 @@ func NewAdmin(app *App) http.Handler {
 	mux.HandleFunc("POST /api/chat/upload", app.handleChatUpload)
 	mux.HandleFunc("GET /api/chat/query", app.handleChatQuery)
 	mux.HandleFunc("POST /api/chat/clear", app.handleChatClear)
+	mux.HandleFunc("POST /api/chat/delete", app.handleChatDelete)
 
 	// 隐藏文件夹
 	mux.HandleFunc("POST /api/hidden", app.handleHidden)

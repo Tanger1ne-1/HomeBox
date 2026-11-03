@@ -275,3 +275,41 @@ func (a *App) handleChatClear(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"ok": true, "removed": len(removed)})
 }
+
+// handleChatDelete 删除指定 seq 的消息及其附件（管理面板用）。
+func (a *App) handleChatDelete(w http.ResponseWriter, r *http.Request) {
+	me, isPC := a.chatIdentity(r)
+	if me == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !isPC {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Seq int64 `json:"seq"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	if req.Seq <= 0 {
+		writeJSON(w, map[string]any{"ok": false, "error": "无效的消息序号"})
+		return
+	}
+	m, ok := a.chat().Delete(me, req.Seq)
+	if !ok {
+		writeJSON(w, map[string]any{"ok": false, "error": "消息不存在"})
+		return
+	}
+	// 附件（若有）一并删除
+	if m.File != "" {
+		dir := files.ChatFilesDir(a.RootDir())
+		base := filepath.Base(filepath.FromSlash(strings.TrimPrefix(m.File, "/")))
+		if base != "" && base != "." && base != string(filepath.Separator) {
+			_ = os.Remove(filepath.Join(dir, base))
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "seq": m.Seq})
+}
