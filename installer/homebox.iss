@@ -2,7 +2,8 @@
 ; 编译：ISCC.exe homebox.iss
 
 #define MyAppName "HomeBox"
-#define MyAppVersion "1.0.0"
+; 版本号与程序读同一个文件（internal/version/version.ini），不要在脚本里写死
+#define MyAppVersion ReadIni(AddBackslash(SourcePath) + "..\internal\version\version.ini", "homebox", "version", "0.0.0")
 #define MyAppExeName "nasd.exe"
 
 [Setup]

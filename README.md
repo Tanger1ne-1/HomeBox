@@ -29,7 +29,7 @@ HomeBox 是一款运行在 Windows PC 上的**个人 / 家庭文件服务**：�
 
 ### 方式一：安装包（推荐）
 
-1. 下载 [最新安装包](https://github.com/Tanger1ne-1/HomeBox/releases) `HomeBox-Setup-1.0.0.exe`，双击安装。
+1. 下载 [最新安装包](https://github.com/Tanger1ne-1/HomeBox/releases) `HomeBox-Setup-1.1.0.exe`，双击安装。
    - 安装过程会自动添加 Windows 防火墙入站规则（放行 TCP 8377）。
 2. 启动 HomeBox（桌面快捷方式或开始菜单）。
 3. 首次启动会弹出向导：创建管理员账号，并可指定要共享的文件夹（也可稍后再设）。
@@ -76,8 +76,25 @@ go build -o nasd.exe -ldflags "-H=windowsgui" ./cmd/nasd
 
 ```bash
 cd installer
-ISCC.exe homebox.iss             # 输出到 ../dist/HomeBox-Setup-1.0.0.exe
+ISCC.exe homebox.iss             # 输出到 ../dist/HomeBox-Setup-<版本号>.exe
 ```
+
+### 版本号
+
+版本号只有一个来源：`internal/version/version.ini`。
+
+```ini
+[homebox]
+version=1.1.0
+```
+
+改这一处即可，下面全部自动跟随：
+
+- 程序中 `/api/version` 返回的版本
+- 手机端左上角显示的版本号
+- 安装包文件名与「添加/删除程序」里显示的版本
+
+> 不要再在 `index.html`、`server.go` 或 `homebox.iss` 里写死版本号。
 
 ---
 

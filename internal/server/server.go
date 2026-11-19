@@ -17,6 +17,7 @@ import (
 	"nas/internal/config"
 	"nas/internal/files"
 	"nas/internal/thumbs"
+	"nas/internal/version"
 	"nas/internal/web"
 )
 
@@ -43,6 +44,7 @@ func New(app *App) http.Handler {
 	mux.HandleFunc("POST /api/sleep", app.handleSleep)
 	mux.HandleFunc("GET /api/chat/state", app.handleChatState)
 	mux.HandleFunc("GET /api/chat/messages", app.handleChatMessages)
+	mux.HandleFunc("GET /api/chat/stream", app.handleChatStream)
 	mux.HandleFunc("POST /api/chat/text", app.handleChatText)
 	mux.HandleFunc("POST /api/chat/upload", app.handleChatUpload)
 	mux.Handle("/", web.Handler())
@@ -52,8 +54,8 @@ func New(app *App) http.Handler {
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{
-		"name":       "nasd",
-		"version":    "0.2.0",
+		"name":       "HomeBox",
+		"version":    version.Version,
 		"apiVersion": "1",
 	})
 }

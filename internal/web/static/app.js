@@ -65,10 +65,12 @@
   const chatCloseEl = $('chat-close');
   const chatPeerEl = $('chat-peer');
   const chatMsgsEl = $('chat-msgs');
+  const chatMoreEl = $('chat-more');
   const chatAddEl = $('chat-add');
   const chatInputEl = $('chat-input');
   const chatSendEl = $('chat-send');
   const chatFileInputEl = $('chat-file-input');
+  const statsEl = $('stats');
 
   const ICONS = { dir: '📁', image: '🖼️', video: '🎬', audio: '🎵', text: '📄', other: '📦' };
 
@@ -91,6 +93,8 @@
   let chatPeer = '';           // 对方（手机端恒为设备名）
   let chatMe = '';             // 自己（用户名）
   let chatLastSeq = 0;         // 已见最大消息序号
+  let chatFirstSeq = 0;        // 已加载的最早消息序号
+  let chatHasMore = false;     // 更早还有消息可加载
 
   // 画廊层
   let viewportRef = null;
@@ -162,6 +166,62 @@
       return res;
     });
   }
+
+  // 读 JSON：iOS Safari 在响应不是 JSON 时只会抛
+  // "SyntaxError: The string did not match the expected pattern."，
+  // 这里改成带上状态码与响应片段，便于定位真正的原因。
+  async function readJSON(res) {
+    const text = await res.text();
+    if (!text) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return {};
+    }
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error('HTTP ' + res.status + ' ' + text.slice(0, 120).replace(/\s+/g, ' '));
+    }
+  }
+
+  // iOS Safari 对 multipart 文件名里的非 ASCII 字符会抛 SyntaxError，
+  // 此时退回 ASCII 安全名重传（保留扩展名）。
+  function asciiFormName(name, idx) {
+    const raw = String(name || '');
+    const dot = raw.lastIndexOf('.');
+    const ext = dot > 0 ? raw.slice(dot + 1) : '';
+    const safeExt = /^[A-Za-z0-9]{1,8}$/.test(ext) ? ext.toLowerCase() : 'bin';
+    const stem = raw.slice(0, dot > 0 ? dot : raw.length)
+      .replace(/[^A-Za-z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return (stem || ('file_' + (idx + 1))).slice(0, 80) + '.' + safeExt;
+  }
+
+  function buildForm(file, idx, opts) {
+    opts = opts || {};
+    const fd = new FormData();
+    // 幂等标识必须是普通字段，且排在文件之前
+    if (opts.cid) fd.append('cid', opts.cid);
+    try {
+      fd.append('file', file, opts.ascii ? asciiFormName(file.name, idx) : file.name);
+    } catch (e) {
+      fd.append('file', file, asciiFormName(file.name, idx));
+    }
+    return fd;
+  }
+
+  function isFormNameError(e) {
+    return e && e.name === 'SyntaxError' && /expected pattern/i.test(String(e.message || ''));
+  }
+
+  // 幂等标识：同一次发送的所有重试共用它，服务端据此去重
+  function newCID() {
+    try {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    } catch (e) {}
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
   async function load(path) {
     if (path !== current) { selected.clear(); editMode = false; }
@@ -877,8 +937,7 @@
         return;
       }
       const file = files[idx];
-      const fd = new FormData();
-      fd.append('file', file, file.name);
+      const fd = buildForm(file, idx);
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/upload?path=' + encodeURIComponent(current));
       xhr.upload.onprogress = (e) => {
@@ -1435,7 +1494,7 @@
   }
   function chatScrollBottom() { chatMsgsEl.scrollTop = chatMsgsEl.scrollHeight; }
 
-  function addChatBubble(m) {
+  function buildChatBubble(m) {
     const mine = m.from === chatMe;
     const wrap = document.createElement('div');
     wrap.className = 'chat-msg ' + (mine ? 'me' : 'peer');
@@ -1453,8 +1512,17 @@
     } else if (m.type === 'image') {
       const img = document.createElement('img');
       img.className = 'chat-img';
-      img.src = fileURL(m.file);
+      // 用缩略图 + 懒加载：对话里动辄上千张照片时，直接加载原图会把 iOS Safari 的内存吃光。
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.src = '/api/thumb?path=' + encodeURIComponent(m.file);
       img.alt = m.fileName || '';
+      // 缩略图生成失败时退回原图
+      img.addEventListener('error', () => {
+        if (img.dataset.full) return;
+        img.dataset.full = '1';
+        img.src = fileURL(m.file);
+      });
       img.addEventListener('click', () => openChatMedia(m.file, m.fileName || '图片', 'image'));
       wrap.appendChild(img);
     } else if (m.type === 'video') {
@@ -1478,36 +1546,130 @@
     t.className = 'chat-time';
     t.textContent = chatTime(m.time);
     wrap.appendChild(t);
-    chatMsgsEl.appendChild(wrap);
+    return wrap;
   }
+
+  // 一页渲染多少条：几万张照片的对话若一次性渲染，iOS Safari 必然崩标签页。
+  const CHAT_PAGE = 150;
 
   function appendChatMessages(msgs) {
     if (!msgs || !msgs.length) return;
     let max = chatLastSeq;
     for (const m of msgs) {
       if (m.seq <= chatLastSeq) continue;
-      addChatBubble(m);
+      chatMsgsEl.appendChild(buildChatBubble(m));
       if (m.seq > max) max = m.seq;
     }
     chatLastSeq = max;
     chatScrollBottom();
   }
 
+  // 「加载更早」：把上一页插到最前面，并保持当前滚动位置不跳动。
+  async function loadEarlierChat() {
+    if (!chatHasMore || !chatFirstSeq || !chatPeer) return;
+    try {
+      const res = await apiFetch('/api/chat/messages?peer=' + encodeURIComponent(chatPeer) +
+        '&before=' + chatFirstSeq + '&limit=' + CHAT_PAGE);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await readJSON(res);
+      const msgs = data.messages || [];
+      chatHasMore = !!data.hasMore;
+      if (msgs.length) {
+        chatFirstSeq = msgs[0].seq;
+        const before = chatMsgsEl.scrollHeight;
+        const frag = document.createDocumentFragment();
+        for (const m of msgs) frag.appendChild(buildChatBubble(m));
+        chatMsgsEl.insertBefore(frag, chatMsgsEl.firstChild);
+        chatMsgsEl.scrollTop += chatMsgsEl.scrollHeight - before;
+      }
+      updateChatMore();
+    } catch (e) {
+      alert('加载历史失败：' + e);
+    }
+  }
+
+  function updateChatMore() {
+    chatMoreEl.classList.toggle('hidden', !chatHasMore);
+  }
+
   async function chatPoll() {
     if (!chatPeer) return;
     try {
-      const res = await apiFetch('/api/chat/messages?peer=' + encodeURIComponent(chatPeer) + '&after=' + chatLastSeq);
+      // 首次轮询（还没载入任何消息）时只取最近一页，避免把全部历史拉下来
+      const q = chatLastSeq > 0 ? '&after=' + chatLastSeq : '&limit=' + CHAT_PAGE;
+      const res = await apiFetch('/api/chat/messages?peer=' + encodeURIComponent(chatPeer) + q);
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
+      const data = await readJSON(res);
       appendChatMessages(data.messages || []);
     } catch (e) {}
+  }
+
+  // —— 实时推送（SSE）——
+  // 有推送就不轮询；EventSource 不可用或连续失败时自动退回轮询。
+  let chatES = null;
+  let chatStreamRetry = 0;
+
+  function stopChatStream() {
+    if (chatES) {
+      chatES.onerror = null;
+      chatES.close();
+      chatES = null;
+    }
+    if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+    if (chatRefreshTimer) { clearTimeout(chatRefreshTimer); chatRefreshTimer = null; }
+    chatStreamRetry = 0;
+  }
+
+  function startChatStream() {
+    stopChatStream();
+    if (!chatPeer) return;
+    if (typeof EventSource === 'undefined') {
+      startChatPolling();
+      return;
+    }
+    const es = new EventSource('/api/chat/stream?peer=' + encodeURIComponent(chatPeer) +
+      '&after=' + chatLastSeq);
+    chatES = es;
+    es.onopen = function () { chatStreamRetry = 0; };
+    es.onmessage = function (e) {
+      chatStreamRetry = 0;
+      try { appendChatMessages(JSON.parse(e.data)); } catch (err) {}
+    };
+    es.onerror = function () {
+      es.close();
+      if (chatES !== es) return; // 已经被主动关闭
+      chatES = null;
+      chatStreamRetry++;
+      if (chatStreamRetry <= 5) {
+        // 带最新的 after 重连，避免重连后重复下发历史
+        setTimeout(function () { if (!chatES && chatPeer) startChatStream(); }, 2000);
+      } else {
+        startChatPolling();
+      }
+    };
+  }
+
+  function startChatPolling() {
+    if (chatTimer) clearInterval(chatTimer);
+    chatTimer = setInterval(chatPoll, 3000);
+  }
+
+  // 无推送时，发送/上传后尽快刷新一次（合并短时间内的多次调用）
+  let chatRefreshTimer = null;
+  function chatRefreshSoon() {
+    if (chatES || !chatPeer) return;
+    if (chatRefreshTimer) return;
+    chatRefreshTimer = setTimeout(function () {
+      chatRefreshTimer = null;
+      chatPoll();
+    }, 300);
   }
 
   async function openChat() {
     try {
       const res = await apiFetch('/api/chat/state');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const st = await res.json();
+      const st = await readJSON(res);
       chatMe = st.me || '';
       chatPeer = st.deviceName || 'HomeBox';
     } catch (e) {
@@ -1515,21 +1677,37 @@
       chatPeer = 'HomeBox';
     }
     chatLastSeq = 0;
+    chatFirstSeq = 0;
+    chatHasMore = false;
     chatMsgsEl.innerHTML = '';
     chatPeerEl.textContent = chatPeer;
     chatInputEl.placeholder = '发送给 ' + chatPeer + '…';
     chatEl.classList.remove('hidden');
-    chatPoll();
-    chatTimer = setInterval(chatPoll, 3000);
+    updateChatMore();
+    // 只加载最近一页；更早的内容点「加载更早」按需取
+    try {
+      const res = await apiFetch('/api/chat/messages?peer=' + encodeURIComponent(chatPeer) + '&limit=' + CHAT_PAGE);
+      if (res.ok) {
+        const data = await readJSON(res);
+        const msgs = data.messages || [];
+        chatHasMore = !!data.hasMore;
+        if (msgs.length) chatFirstSeq = msgs[0].seq;
+        appendChatMessages(msgs);
+        updateChatMore();
+      }
+    } catch (e) {}
+    startChatStream();
     chatInputEl.focus();
   }
 
   function closeChat() {
     chatEl.classList.add('hidden');
-    if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+    stopChatStream();
     chatPeer = '';
     chatMe = '';
     chatLastSeq = 0;
+    chatFirstSeq = 0;
+    chatHasMore = false;
     chatMsgsEl.innerHTML = '';
   }
 
@@ -1570,36 +1748,101 @@
       const res = await apiFetch('/api/chat/text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: chatPeer, text: text }),
+        body: JSON.stringify({ to: chatPeer, text: text, cid: newCID() }),
       });
-      const data = await res.json();
-      if (data.ok && data.message) appendChatMessages([data.message]);
+      const data = await readJSON(res);
+      if (data.ok) chatRefreshSoon(); // 由推送/刷新按 seq 顺序补齐，避免并发时乱序丢消息
       else if (data.error) alert('发送失败：' + data.error);
     } catch (e) {
       alert('发送失败：' + e);
     }
   }
 
-  async function sendChatFiles(files) {
-    if (!files || !files.length || !chatPeer) return;
-    for (const file of files) {
-      const fd = new FormData();
-      fd.append('file', file, file.name);
+  // 并发上传：iOS 对同源连接有上限（约 6），留出余量给图片与轮询
+  const CHAT_UPLOAD_CONCURRENCY = 2;
+  const CHAT_UPLOAD_RETRIES = 2;
+
+  // 传输期间保持屏幕常亮（Safari 16.4+ 支持，不支持则忽略）
+  let chatWakeLock = null;
+  async function acquireWakeLock() {
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        chatWakeLock = await navigator.wakeLock.request('screen');
+      }
+    } catch (e) {
+      chatWakeLock = null;
+    }
+  }
+  function releaseWakeLock() {
+    if (!chatWakeLock) return;
+    try { chatWakeLock.release(); } catch (e) {}
+    chatWakeLock = null;
+  }
+
+  // 上传单个文件：失败自动重试；同一 cid 保证服务端不会重复入账
+  async function putChatFile(file, idx, url) {
+    const cid = newCID();
+    let lastErr = null;
+    for (let attempt = 0; attempt <= CHAT_UPLOAD_RETRIES; attempt++) {
       try {
-        const res = await apiFetch('/api/chat/upload?to=' + encodeURIComponent(chatPeer), {
-          method: 'POST',
-          body: fd,
-        });
-        const data = await res.json();
-        if (data.ok) appendChatMessages(data.messages || []);
-        else if (data.error) alert('发送失败：' + data.error);
+        let res;
+        try {
+          res = await apiFetch(url, { method: 'POST', body: buildForm(file, idx, { cid: cid }) });
+        } catch (err) {
+          // iOS Safari 对非 ASCII 文件名会抛 SyntaxError，改用 ASCII 名重试
+          if (!isFormNameError(err)) throw err;
+          res = await apiFetch(url, { method: 'POST', body: buildForm(file, idx, { cid: cid, ascii: true }) });
+        }
+        const data = await readJSON(res);
+        if (!data.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        return;
       } catch (e) {
-        alert('发送失败：' + e);
+        lastErr = e;
+        if (attempt < CHAT_UPLOAD_RETRIES) await sleep(600 * (attempt + 1));
       }
     }
+    throw lastErr;
+  }
+
+  async function sendChatFiles(files) {
+    if (!files || !files.length || !chatPeer) return;
+    const url = '/api/chat/upload?to=' + encodeURIComponent(chatPeer);
+    const peer = chatPeer;
+    const total = files.length;
+    let done = 0;
+    let failed = 0;
+    let firstErr = '';
+    let nextIdx = 0;
+
+    await acquireWakeLock();
+    try {
+      async function worker() {
+        while (nextIdx < total) {
+          const i = nextIdx++;
+          const file = files[i];
+          try {
+            await putChatFile(file, i, url);
+          } catch (e) {
+            failed++;
+            if (!firstErr) firstErr = String(e);
+          }
+          done++;
+          chatPeerEl.textContent = peer + ' · ' + done + '/' + total;
+          chatRefreshSoon();
+        }
+      }
+      const n = Math.min(CHAT_UPLOAD_CONCURRENCY, total);
+      await Promise.all(Array.from({ length: n }, worker));
+    } finally {
+      releaseWakeLock();
+      chatPeerEl.textContent = peer;
+    }
+    // 一次失败只弹一次，避免几百个 alert 把页面卡死
+    if (failed) alert('发送完成，' + failed + '/' + total + ' 个失败' + (firstErr ? '：' + firstErr : ''));
   }
 
   btnChatEl.addEventListener('click', openChat);
+  chatMoreEl.addEventListener('click', loadEarlierChat);
   chatCloseEl.addEventListener('click', closeChat);
   chatSendEl.addEventListener('click', sendChatText);
   chatInputEl.addEventListener('keydown', (e) => {
@@ -1617,6 +1860,11 @@
     try { start = localStorage.getItem('nas-last-path') || '/'; } catch (e) { start = '/'; }
   }
   navigate(start);
+
+  // 版本号取自服务端（唯一来源见 internal/version/version.ini），不在页面里写死
+  fetch('/api/version').then((res) => res.json()).then((d) => {
+    if (d && d.version) statsEl.textContent = 'v' + d.version;
+  }).catch(() => {});
 
   // 心跳：页面打开期间周期刷新会话在线状态（管理面板的移动端指示灯据此判断在线）
   setInterval(() => {

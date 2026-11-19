@@ -609,6 +609,18 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .chat-more {
+      align-self: center;
+      margin: 8px 0 0;
+      padding: 5px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .chat-more:active { opacity: .6; }
     .chat-msgs {
       flex: 1;
       overflow-y: auto;
@@ -701,7 +713,7 @@
   <header class="topbar">
     <div class="title-group">
       <div class="title">HomeBox</div>
-      <div id="stats" class="stats">v0.4.0</div>
+      <div id="stats" class="stats"></div>
     </div>
     <div class="topbar-right">
       <button id="theme-toggle" class="theme-btn" aria-label="切换深色模式">🌙</button>
@@ -814,6 +826,7 @@
       <button id="chat-close" class="chat-add" aria-label="关闭">✕</button>
       <span id="chat-peer" class="chat-peer-name">HomeBox</span>
     </div>
+    <button id="chat-more" class="chat-more hidden">加载更早的消息</button>
     <div id="chat-msgs" class="chat-msgs"></div>
     <div class="chat-composer">
       <button id="chat-add" class="chat-add" aria-label="发送文件">＋</button>

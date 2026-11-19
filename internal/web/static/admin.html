@@ -195,6 +195,8 @@
     .chat-head { display:flex; align-items:center; gap:8px; padding:11px 16px; background:var(--panel); border-bottom:1px solid var(--border); font-size:15px; font-weight:600; flex-shrink:0; }
     .chat-head #chat-peer-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .chat-menu { border:1px solid var(--border); background:var(--panel-2); color:var(--text); border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:17px; line-height:1; flex-shrink:0; display:flex; align-items:center; justify-content:center; letter-spacing:2px; }
+    .chat-more { align-self:center; margin:10px 0 0; padding:5px 14px; font-size:12px; color:var(--muted); background:var(--panel); border:1px solid var(--border); border-radius:999px; cursor:pointer; }
+    .chat-more:hover { color:var(--text); }
     .chat-msgs { flex:1; overflow-y:auto; padding:14px 16px 8px; display:flex; flex-direction:column; gap:10px; }
     .chat-msg { display:flex; flex-direction:column; max-width:60%; }
     .chat-msg.me { align-self:flex-end; align-items:flex-end; }
@@ -377,6 +379,7 @@
           <div class="chat-contacts-list" id="chat-contacts-list"></div>
         </div>
         <div class="chat-room">
+          <button id="chat-more" class="chat-more hidden">加载更早的消息</button>
           <div class="chat-msgs" id="chat-msgs"></div>
           <div class="chat-composer">
             <button id="chat-add" class="chat-add" title="发送文件">＋</button>
@@ -431,6 +434,17 @@
             <input id="device-name" type="text" placeholder="例如 我的电脑" style="flex:1;">
             <button id="save-device-name" class="btn">保存</button>
           </div>
+        </div>
+
+        <div class="card">
+          <h2>🗂 对话附件</h2>
+          <div class="kv"><span>占用空间</span><span class="v" id="chat-usage-total">—</span></div>
+          <div id="chat-usage-groups" style="margin-top:8px;"></div>
+          <div class="row" style="margin-top:14px;">
+            <button id="chat-usage-refresh" class="btn">刷新</button>
+            <button id="chat-clear-all" class="btn danger">🗑 清空全部附件</button>
+          </div>
+          <div class="muted" id="chat-usage-status"></div>
         </div>
 
         <div class="card">
@@ -593,6 +607,8 @@
       var chatPeer = '';
       var chatMe = '';
       var chatLastSeq = 0;
+      var chatFirstSeq = 0;   // 已加载的最早消息序号
+      var chatHasMore = false; // 更早还有消息
       var chatTimer = null;
 
       function showView(id) {
@@ -761,6 +777,49 @@
             renderAccounts(d.accounts);
           } else toast('失败：' + (d.error || ''));
         });
+      });
+
+      // —— 对话附件占用 ——
+      // 只做展示与手动清空，不做任何自动删除。
+      function loadChatUsage() {
+        apiFetch('/api/chat/stats').then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(function (d) {
+          $('chat-usage-total').textContent = humanSize(d.bytes) + ' · ' + (d.count || 0) + ' 个文件';
+          var box = $('chat-usage-groups');
+          box.innerHTML = '';
+          var groups = d.groups || [];
+          if (!groups.length) {
+            box.innerHTML = '<div class="muted">还没有附件</div>';
+            return;
+          }
+          groups.forEach(function (g) {
+            var row = document.createElement('div');
+            row.className = 'kv';
+            var name = document.createElement('span');
+            name.textContent = g.peer;
+            var val = document.createElement('span');
+            val.className = 'v';
+            val.textContent = humanSize(g.bytes) + ' · ' + g.count + ' 个';
+            row.appendChild(name);
+            row.appendChild(val);
+            box.appendChild(row);
+          });
+        }).catch(function () {
+          $('chat-usage-total').textContent = '读取失败';
+        });
+      }
+
+      $('chat-usage-refresh').addEventListener('click', loadChatUsage);
+      $('chat-clear-all').addEventListener('click', function () {
+        var total = $('chat-usage-total').textContent;
+        if (!confirm('将删除全部对话附件（当前 ' + total + '），以及引用它们的消息。\n纯文字消息会保留，此操作不可撤销。\n\n确定继续？')) return;
+        postJSON('/api/chat/clearall', {}).then(function (d) {
+          if (!d.ok) { toast('清空失败：' + (d.error || '')); return; }
+          $('chat-usage-status').textContent = '已删除 ' + d.files + ' 个附件（' + humanSize(d.freed) + '）、' + d.messages + ' 条消息';
+          loadChatUsage();
+        }).catch(function (e) { toast('清空失败：' + e); });
       });
 
       // —— 设备名称 ——
@@ -1531,6 +1590,7 @@
           leaveChat();
           loadStatus();
           loadDisks();
+          loadChatUsage();
         }
       }
       $('tab-files').addEventListener('click', function () { switchTab('files'); });
@@ -1573,12 +1633,25 @@
       function selectChatPeer(username) {
         chatPeer = username;
         chatLastSeq = 0;
+        chatFirstSeq = 0;
+        chatHasMore = false;
         chatMe = deviceName || 'HomeBox';
         $('chat-msgs').innerHTML = '';
         $('chat-peer-name').textContent = username;
         $('chat-input').placeholder = '发送给 ' + username + '…';
         renderChatContacts(lastAccounts);
-        chatPoll();
+        updateChatMore();
+        // 先取最近一页，更早的用「加载更早的消息」按需拉取
+        apiFetch('/api/chat/messages?peer=' + encodeURIComponent(username) + '&limit=' + ADMIN_CHAT_PAGE).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(function (d) {
+          var msgs = d.messages || [];
+          chatHasMore = !!d.hasMore;
+          if (msgs.length) chatFirstSeq = msgs[0].seq;
+          appendChatMessages(msgs);
+          updateChatMore();
+        }).catch(function () {});
       }
 
       function enterChat() {
@@ -1596,7 +1669,8 @@
 
       function chatPoll() {
         if (!chatPeer) return;
-        apiFetch('/api/chat/messages?peer=' + encodeURIComponent(chatPeer) + '&after=' + chatLastSeq).then(function (r) {
+        var q = chatLastSeq > 0 ? '&after=' + chatLastSeq : '&limit=' + ADMIN_CHAT_PAGE;
+        apiFetch('/api/chat/messages?peer=' + encodeURIComponent(chatPeer) + q).then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
         }).then(function (d) {
@@ -1604,7 +1678,7 @@
         }).catch(function () {});
       }
 
-      function addChatBubble(m) {
+      function buildChatBubble(m) {
         var mine = m.from === chatMe;
         var wrap = document.createElement('div');
         wrap.className = 'chat-msg ' + (mine ? 'me' : 'peer');
@@ -1624,8 +1698,16 @@
         } else if (m.type === 'image') {
           var img = document.createElement('img');
           img.className = 'chat-img';
-          img.src = fileURL(m.file);
+          // 缩略图 + 懒加载：上千条图片消息时直接加载原图会拖垮渲染
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          img.src = '/api/thumb?path=' + encodeURIComponent(m.file);
           img.alt = m.fileName || '';
+          img.addEventListener('error', function () {
+            if (img.dataset.full) return;
+            img.dataset.full = '1';
+            img.src = fileURL(m.file);
+          });
           img.addEventListener('click', function () { openChatMedia(m.file, m.fileName || '图片', 'image'); });
           wrap.appendChild(img);
         } else if (m.type === 'video') {
@@ -1646,19 +1728,48 @@
         t.className = 'chat-time';
         t.textContent = chatTime(m.time);
         wrap.appendChild(t);
-        $('chat-msgs').appendChild(wrap);
+        return wrap;
       }
+
+      var ADMIN_CHAT_PAGE = 200;
 
       function appendChatMessages(msgs) {
         if (!msgs || !msgs.length) return;
         var max = chatLastSeq;
         msgs.forEach(function (m) {
           if (m.seq <= chatLastSeq) return;
-          addChatBubble(m);
+          $('chat-msgs').appendChild(buildChatBubble(m));
           if (m.seq > max) max = m.seq;
         });
         chatLastSeq = max;
         chatScrollBottom();
+      }
+
+      function updateChatMore() {
+        $('chat-more').classList.toggle('hidden', !chatHasMore);
+      }
+
+      // 加载更早一页，插到最前面并保持滚动位置
+      function loadEarlierChat() {
+        if (!chatHasMore || !chatFirstSeq || !chatPeer) return;
+        apiFetch('/api/chat/messages?peer=' + encodeURIComponent(chatPeer) +
+          '&before=' + chatFirstSeq + '&limit=' + ADMIN_CHAT_PAGE).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(function (d) {
+          var msgs = d.messages || [];
+          chatHasMore = !!d.hasMore;
+          var msgsEl = $('chat-msgs');
+          if (msgs.length) {
+            chatFirstSeq = msgs[0].seq;
+            var before = msgsEl.scrollHeight;
+            var frag = document.createDocumentFragment();
+            msgs.forEach(function (m) { frag.appendChild(buildChatBubble(m)); });
+            msgsEl.insertBefore(frag, msgsEl.firstChild);
+            msgsEl.scrollTop += msgsEl.scrollHeight - before;
+          }
+          updateChatMore();
+        }).catch(function (e) { toast('加载历史失败：' + e); });
       }
 
       // 右键消息：复制 / 删除
@@ -1732,16 +1843,54 @@
         }).catch(function (e) { toast('发送失败：' + e); });
       }
 
+      var ADMIN_UPLOAD_CONCURRENCY = 2;
+      var adminRefreshTimer = null;
+
+      function newCID() {
+        try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+        return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+      }
+
+      // 发送后尽快刷新一次（合并短时间内的多次调用），消息按 seq 顺序补齐
+      function adminChatRefreshSoon() {
+        if (adminRefreshTimer) return;
+        adminRefreshTimer = setTimeout(function () {
+          adminRefreshTimer = null;
+          chatPoll();
+        }, 300);
+      }
+
       function sendChatFiles(files) {
         if (!files || !files.length || !chatPeer) return;
-        Array.from(files).forEach(function (file) {
-          var name = file.name || ('截图_' + Date.now() + '.png');
+        var list = Array.from(files);
+        var url = '/api/chat/upload?to=' + encodeURIComponent(chatPeer);
+        var next = 0, failed = 0, firstErr = '';
+
+        function one(file, i) {
           var fd = new FormData();
-          fd.append('file', file, name);
-          apiFetch('/api/chat/upload?to=' + encodeURIComponent(chatPeer), { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (d) {
-            if (d.ok) appendChatMessages(d.messages || []);
-            else if (d.error) toast('发送失败：' + d.error);
-          }).catch(function (e) { toast('发送失败：' + e); });
+          fd.append('cid', newCID()); // 幂等标识，重传不会产生重复消息
+          fd.append('file', file, file.name || ('文件_' + (i + 1)));
+          var work = apiFetch(url, { method: 'POST', body: fd }).then(function (r) {
+            return r.json();
+          }).then(function (d) {
+            if (!d.ok) throw new Error(d.error || '未知错误');
+          });
+          return work.catch(function (e) {
+            failed++;
+            if (!firstErr) firstErr = String(e);
+          }).then(adminChatRefreshSoon);
+        }
+
+        function worker() {
+          if (next >= list.length) return Promise.resolve();
+          var i = next++;
+          return one(list[i], i).then(worker);
+        }
+
+        var jobs = [];
+        for (var k = 0; k < Math.min(ADMIN_UPLOAD_CONCURRENCY, list.length); k++) jobs.push(worker());
+        Promise.all(jobs).then(function () {
+          if (failed) toast('发送完成，' + failed + '/' + list.length + ' 个失败' + (firstErr ? '：' + firstErr : ''));
         });
       }
 
@@ -1893,6 +2042,7 @@
         sendChatFiles(images);
       });
 
+      $('chat-more').addEventListener('click', loadEarlierChat);
       $('chat-send').addEventListener('click', sendChatText);
       $('chat-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sendChatText(); } });
       $('chat-add').addEventListener('click', function () { $('chat-file-input').click(); });
